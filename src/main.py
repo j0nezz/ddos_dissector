@@ -12,7 +12,7 @@ from util import parse_config, print_logo, determine_filetype
 from misp import MispInstance
 from reader import read_file
 from attack import Attack, Fingerprint
-from analysis import infer_target, extract_attack_vectors, compute_summary
+from analysis import infer_target, extract_attack_vectors, compute_summary, infer_target_by_index
 
 DOCKERIZED: bool = 'DISSECTOR_DOCKER' in os.environ
 
@@ -50,30 +50,33 @@ if __name__ == '__main__':
     filetype = determine_filetype(args.files)
     # Read the file(s) into a dataframe
     data: pd.DataFrame = pd.concat([read_file(f, filetype=filetype, nr_processes=args.n) for f in args.files])
-    attack = Attack(data, filetype)  # Construct an Attack object with the DDoS data
-    target: List[IPNetwork] = args.targets or [infer_target(attack)]  # Infer attack target if not passed as argument
-    attack.filter_data_on_target(target=target)  # Keep only the traffic sent to the target
-    attack_vectors = extract_attack_vectors(attack)  # Extract the attack vectors from the attack
-    if len(attack_vectors) == 0:
-        LOGGER.critical(f'No attack vectors found in traffic capture.')
-        sys.exit(1)
-    summary = compute_summary(attack_vectors)  # Compute summary statistics of the attack (e.g. average bps / Bpp / pps)
-    # Generate fingeperint
-    fingerprint = Fingerprint(target=target, summary=summary, attack_vectors=attack_vectors,
-                              show_target=args.show_target)
+    for i in range(10):
+        LOGGER.info("Evaluating Iteration %d" % i)
+        attack = Attack(data, filetype)  # Construct an Attack object with the DDoS data
+        target: List[IPNetwork] = [infer_target_by_index(attack, i)]  # Infer attack target if not passed as argument
+        attack.filter_data_on_target(target=target)  # Keep only the traffic sent to the target
+        attack_vectors = extract_attack_vectors(attack)  # Extract the attack vectors from the attack
+        if len(attack_vectors) == 0:
+            LOGGER.critical(f'No attack vectors found in traffic capture.')
+            sys.exit(1)
+        summary = compute_summary(
+            attack_vectors)  # Compute summary statistics of the attack (e.g. average bps / Bpp / pps)
+        # Generate fingeperint
+        fingerprint = Fingerprint(target=target, summary=summary, attack_vectors=attack_vectors,
+                                  show_target=args.show_target)
 
-    if args.summary:  # If the user wants a preview, show the finerprint in the terminal
-        LOGGER.info(str(fingerprint))
+        if args.summary:  # If the user wants a preview, show the finerprint in the terminal
+            LOGGER.info(str(fingerprint))
 
-    args.output.mkdir(parents=True, exist_ok=True)
-    fingerprint.write_to_file(args.output / (fingerprint.checksum[:16] + '.json'))  # write the fingerprint to disk
+        args.output.mkdir(parents=True, exist_ok=True)
+        fingerprint.write_to_file(args.output / (fingerprint.checksum[:16] + '.json'))  # write the fingerprint to disk
 
-    if args.ddosdb:  # Upload the fingerprint to a specified DDoS-DB instance
-        fingerprint.upload_to_ddosdb(**parse_config(args.config), noverify=args.noverify)
-    if args.misp:  # Upload the fingerprint to a specified MISP instance
-        conf = parse_config(args.config, misp=True)
-        misp_instance = MispInstance(host=conf['host'], token=conf['token'], protocol=conf['protocol'],
-                                     verify_tls=not args.noverify, sharing_group=conf['sharing_group'],
-                                     publish=conf['publish'])
-        if misp_instance.misp is not None:
-            fingerprint.upload_to_misp(misp_instance)
+        if args.ddosdb:  # Upload the fingerprint to a specified DDoS-DB instance
+            fingerprint.upload_to_ddosdb(**parse_config(args.config), noverify=args.noverify)
+        if args.misp:  # Upload the fingerprint to a specified MISP instance
+            conf = parse_config(args.config, misp=True)
+            misp_instance = MispInstance(host=conf['host'], token=conf['token'], protocol=conf['protocol'],
+                                         verify_tls=not args.noverify, sharing_group=conf['sharing_group'],
+                                         publish=conf['publish'])
+            if misp_instance.misp is not None:
+                fingerprint.upload_to_misp(misp_instance)
