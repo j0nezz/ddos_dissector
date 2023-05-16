@@ -38,6 +38,15 @@ def parse_arguments() -> Namespace:
     parser.add_argument('--debug', action='store_true', help='Optional: show debug messages')
     parser.add_argument('--show-target', action='store_true', help='Optional: Do NOT anonymize the target IP address '
                                                                    '/ network in the fingerprint')
+    parser.add_argument('-n', '--nfingerprints', type=int, dest='nr_fp',
+                        help='Optional: Generate fingerprints for top n targeted IPs')
+    parser.add_argument('-t', '--threshold', dest='threshold',
+                        help='Optional: Detection threshold for attack target selection')
+    parser.add_argument('-e', '--extended-format', dest='extended', action='store_true',
+                        help='Optional: Use the extended Fingerprint Format'),
+    parser.add_argument('-l', '--location', dest='location',
+                        help='Optional: Recording location (used in extended FP format)')
+
     return parser.parse_args()
 
 
@@ -50,10 +59,14 @@ if __name__ == '__main__':
     filetype = determine_filetype(args.files)
     # Read the file(s) into a dataframe
     data: pd.DataFrame = pd.concat([read_file(f, filetype=filetype, nr_processes=args.n) for f in args.files])
-    for i in range(10):
-        LOGGER.info("Evaluating Iteration %d" % i)
+
+
+    def calculate_fp(index=None):
+        if index is not None:
+            LOGGER.info("Evaluating Iteration %d" % index)
         attack = Attack(data, filetype)  # Construct an Attack object with the DDoS data
-        target: List[IPNetwork] = [infer_target_by_index(attack, i)]  # Infer attack target if not passed as argument
+        target: List[IPNetwork] = [infer_target_by_index(attack, index)] if index is not None else (args.targets or [
+            infer_target(attack, threshold=args.threshold)])  # Infer attack target if not passed as argument
         attack.filter_data_on_target(target=target)  # Keep only the traffic sent to the target
         attack_vectors = extract_attack_vectors(attack)  # Extract the attack vectors from the attack
         if len(attack_vectors) == 0:
@@ -63,7 +76,7 @@ if __name__ == '__main__':
             attack_vectors)  # Compute summary statistics of the attack (e.g. average bps / Bpp / pps)
         # Generate fingeperint
         fingerprint = Fingerprint(target=target, summary=summary, attack_vectors=attack_vectors,
-                                  show_target=args.show_target)
+                                  show_target=args.show_target, location=args.location)
 
         if args.summary:  # If the user wants a preview, show the finerprint in the terminal
             LOGGER.info(str(fingerprint))
@@ -80,3 +93,10 @@ if __name__ == '__main__':
                                          publish=conf['publish'])
             if misp_instance.misp is not None:
                 fingerprint.upload_to_misp(misp_instance)
+
+
+    if args.nr_fp:
+        for i in range(args.nr_fp):
+            calculate_fp(i)
+    else:
+        calculate_fp()

@@ -179,7 +179,7 @@ class AttackVector:
 
 class Fingerprint:
     def __init__(self, target: List[IPNetwork], summary: dict[str, int], attack_vectors: list[AttackVector],
-                 show_target: bool = False):
+                 show_target: bool = False, location: str = ""):
         self.target: List[IPNetwork] = []
         for t in target:
             if t.version == 4 and t.prefixlen == 32 or t.version == 6 and t.prefixlen == 128:
@@ -191,16 +191,19 @@ class Fingerprint:
         self.show_target = show_target
         self.tags = self.determine_tags()
         self.checksum = hashlib.md5((str(attack_vectors) + str(summary)).encode()).hexdigest()
+        self.location = location or ""
 
     def __str__(self):
         return json.dumps(self.as_dict(summarized=True), indent=4)
 
-    def as_dict(self, anonymous: bool = False, summarized: bool = False) -> dict:
+    def as_dict(self, anonymous: bool = False, summarized: bool = False, extended_format: bool = False) -> dict:
+        # TODO handle extended format
         return {
             'attack_vectors': [av.as_dict(summarized) for av in self.attack_vectors],
             'target': ', '.join([str(t) for t in self.target]) if not anonymous else 'Anonymized',
             'tags': self.tags,
             'key': self.checksum,
+            'location': self.location,
             **self.summary
         }
 
@@ -235,7 +238,7 @@ class Fingerprint:
                 tags.append('Amplification attack')
         return list(set(tags))
 
-    def write_to_file(self, filename: Path):
+    def write_to_file(self, filename: Path, extended_format=False):
         """
         Save fingerprint as a JSON file to disk
         :param filename: save location
