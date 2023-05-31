@@ -60,7 +60,6 @@ if __name__ == '__main__':
     # Read the file(s) into a dataframe
     data: pd.DataFrame = pd.concat([read_file(f, filetype=filetype, nr_processes=args.n) for f in args.files])
 
-
     def calculate_fp(index=None):
         if index is not None:
             LOGGER.info("Evaluating Iteration %d" % index)
@@ -76,7 +75,7 @@ if __name__ == '__main__':
             attack_vectors)  # Compute summary statistics of the attack (e.g. average bps / Bpp / pps)
         # Generate fingeperint
         fingerprint = Fingerprint(target=target, summary=summary, attack_vectors=attack_vectors,
-                                  show_target=args.show_target, location=args.location)
+                                  show_target=args.show_target, location=args.location, extended_format=args.extended)
 
         if args.summary:  # If the user wants a preview, show the finerprint in the terminal
             LOGGER.info(str(fingerprint))
