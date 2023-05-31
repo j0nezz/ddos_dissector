@@ -66,7 +66,7 @@ if __name__ == '__main__':
         attack = Attack(data, filetype)  # Construct an Attack object with the DDoS data
         target: List[IPNetwork] = [infer_target_by_index(attack, index)] if index is not None else (args.targets or [
             infer_target(attack, threshold=args.threshold)])  # Infer attack target if not passed as argument
-        attack.filter_data_on_target(target=target)  # Keep only the traffic sent to the target
+        threshold = attack.filter_data_on_target(target=target)  # Keep only the traffic sent to the target
         attack_vectors = extract_attack_vectors(attack)  # Extract the attack vectors from the attack
         if len(attack_vectors) == 0:
             LOGGER.critical(f'No attack vectors found in traffic capture.')
@@ -75,7 +75,7 @@ if __name__ == '__main__':
             attack_vectors)  # Compute summary statistics of the attack (e.g. average bps / Bpp / pps)
         # Generate fingeperint
         fingerprint = Fingerprint(target=target, summary=summary, attack_vectors=attack_vectors,
-                                  show_target=args.show_target, location=args.location, extended_format=args.extended)
+                                  show_target=args.show_target, location=args.location, extended_format=args.extended, threshold=threshold)
 
         if args.summary:  # If the user wants a preview, show the finerprint in the terminal
             LOGGER.info(str(fingerprint))
