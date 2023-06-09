@@ -104,6 +104,7 @@ def read_pcap(filename: Path) -> pd.DataFrame:
     :param filename: location of the PCAP file
     :return: DataFrame of the contents
     """
+    LOGGER.debug("Processing chunk")
     # Check if tshark software is available
     tshark = shutil.which('tshark')
     if not tshark:
@@ -198,10 +199,24 @@ def read_file(filename: Path, filetype: FileType, nr_processes: int) -> pd.DataF
     elif filetype == FileType.PCAP:
         if filename.stat().st_size < (5 ** 6):  # PCAP is smaller than 5MB
             return read_pcap(filename)
+
         LOGGER.debug(f'Splitting PCAP file {filename} into chunks of 5MB.')
-        subprocess.run(['tcpdump', '-r', filename, '-w', '/tmp/dissector_chunk', '-C', '5'], capture_output=True)
-        chunks = [Path(rootdir) / file for rootdir, _, files in os.walk('/tmp')
-                  for file in files if file.startswith('dissector_chunk')]
+        # Create directory in tmp
+        os.makedirs('/tmp/dissector_chunk', exist_ok=True)
+        # Clean up directory in case previous run was aborted and not cleaned up corrctly
+        old_chunks = [Path(rootdir) / file for rootdir, _, files in os.walk('/tmp/dissector_chunk')
+                      for file in files if file.startswith('chunk')]
+        if len(old_chunks) > 0:
+            for chunk in old_chunks:
+                os.remove(chunk)
+
+        # Splitting into chunks
+        process = subprocess.run(['editcap', '-c', '100000', filename, '/tmp/dissector_chunk/chunk.pcap'],
+                                 capture_output=True)
+        if process.returncode != 0:
+            LOGGER.critical("Splitting not successful", process)
+        chunks = [Path(rootdir) / file for rootdir, _, files in os.walk('/tmp/dissector_chunk')
+                  for file in files if file.startswith('chunk')]
 
         pool = multiprocessing.Pool(nr_processes)
         results = pool.map(read_pcap, chunks)  # Read the PCAP chunks concurrently

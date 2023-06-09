@@ -28,11 +28,14 @@ class Attack:
         """
         Only keep traffic directed at the target in Attack.data
         :param target: target network(s) of this attack
-        :return: None
+        :return: Percentage of total packets that have been filtered
         """
         LOGGER.debug('Filtering attack data on target IP address.')
+        len_all = len(self.data)
         target_addresses = [x for t in target for x in self.data.destination_address if x in t]
         self.data = self.data[self.data.destination_address.isin(target_addresses)]
+        len_filtered = len(self.data)
+        return len_filtered/len_all
 
 
 @total_ordering
@@ -55,6 +58,7 @@ class AttackVector:
                                                    use_zscore=False,
                                                    return_others=True)) or 'random'
         self.packets = self.data.nr_packets.sum()
+        self.packets_by_source = {str(key): value for key, value in self.data.groupby('source_address').nr_packets.sum().items()}
         self.bytes = self.data.nr_bytes.sum()
         self.time_start: datetime = pytz.utc.localize(self.data.time_start.min())
         self.time_end: datetime = pytz.utc.localize(self.data.time_end.max())
@@ -97,6 +101,8 @@ class AttackVector:
                                                      return_others=True)) or 'random'
                 self.ttl = dict(get_outliers(self.data, 'ttl', fraction_for_outlier=0.1,
                                              return_others=True)) or 'random'
+                ttl_by_address = self.data.groupby('source_address')['ttl'].agg(lambda x: list(x.unique()))
+                self.ttl_by_address = {str(key): [int(v) for v in value] for key, value in ttl_by_address.items()}
             if self.service == 'DNS':
                 self.dns_query_name = dict(get_outliers(self.data, 'dns_query_name', fraction_for_outlier=0.1,
                                                         return_others=True)) or 'random'
@@ -130,7 +136,10 @@ class AttackVector:
             return NotImplemented
         return self.bytes < other.bytes and self.service != 'Fragmented IP packets'
 
-    def as_dict(self, summarized: bool = False) -> dict:
+    def as_dict(self, summarized: bool = False, extended_format: bool = False, threshold: float = 0) -> dict:
+        if extended_format:
+            LOGGER.debug("Attack Vector use extended Format")
+
         fields = {
             'service': self.service,
             'protocol': self.protocol,
@@ -163,12 +172,16 @@ class AttackVector:
                 fields.update({'ntp_requestcode': self.ntp_requestcode})
             elif self.protocol == 'ICMP':
                 fields.update({'icmp_type': self.icmp_type})
+            if extended_format:
+                fields.update({'ttl_by_source': self.ttl_by_address, 'nr_packets_by_source': self.packets_by_source})
+            if threshold:
+                fields.update({'detection_threshold': threshold})
         return fields
 
 
 class Fingerprint:
     def __init__(self, target: List[IPNetwork], summary: dict[str, int], attack_vectors: list[AttackVector],
-                 show_target: bool = False):
+                 show_target: bool = False, location: str = "", extended_format: bool = False, threshold=0):
         self.target: List[IPNetwork] = []
         for t in target:
             if t.version == 4 and t.prefixlen == 32 or t.version == 6 and t.prefixlen == 128:
@@ -180,16 +193,21 @@ class Fingerprint:
         self.show_target = show_target
         self.tags = self.determine_tags()
         self.checksum = hashlib.md5((str(attack_vectors) + str(summary)).encode()).hexdigest()
+        self.location = location or ""
+        self.extended = extended_format
+        self.threshold = threshold
 
     def __str__(self):
-        return json.dumps(self.as_dict(summarized=True), indent=4)
+        return json.dumps(self.as_dict(summarized=True, extended_format=self.extended, threshold=self.threshold), indent=4)
 
-    def as_dict(self, anonymous: bool = False, summarized: bool = False) -> dict:
+    def as_dict(self, anonymous: bool = False, summarized: bool = False, extended_format: bool = False, threshold: float = 0) -> dict:
+
         return {
-            'attack_vectors': [av.as_dict(summarized) for av in self.attack_vectors],
+            'attack_vectors': [av.as_dict(summarized, extended_format=extended_format, threshold=threshold) for av in self.attack_vectors],
             'target': ', '.join([str(t) for t in self.target]) if not anonymous else 'Anonymized',
             'tags': self.tags,
             'key': self.checksum,
+            'location': self.location,
             **self.summary
         }
 
@@ -228,10 +246,11 @@ class Fingerprint:
         """
         Save fingerprint as a JSON file to disk
         :param filename: save location
+        :param extended_format: Use extended fingerprint format
         :return: None
         """
         with open(filename, 'w') as file:
-            json.dump(self.as_dict(anonymous=not self.show_target), file, indent=4)
+            json.dump(self.as_dict(anonymous=not self.show_target, extended_format=self.extended, threshold=self.threshold), file, indent=4)
 
     def upload_to_ddosdb(self,
                          host: str,

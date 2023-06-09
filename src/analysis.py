@@ -10,21 +10,35 @@ from logger import LOGGER
 from attack import Attack, AttackVector
 from util import get_outliers, FileType
 
-__all__ = ["infer_target", "extract_attack_vectors", "compute_summary"]
+__all__ = ["infer_target", "extract_attack_vectors", "compute_summary", "infer_target_by_index"]
 
 
-def infer_target(attack: Attack) -> IPNetwork:
+def infer_target_by_index(attack: Attack, index: int) -> IPNetwork:
+    LOGGER.debug("Inferring attack target by index %d" % index)
+    packets_per_ip = (attack.data
+                      .groupby('destination_address')['nr_packets']
+                      .sum()
+                      .sort_values(ascending=False))
+    most_traffic_address, nr_packets = list(packets_per_ip.items())[index]
+    return IPNetwork(most_traffic_address)
+
+
+def infer_target(attack: Attack, threshold) -> IPNetwork:
     """
     Infer the target IP address(es) of this attack.
     If the target is a subnet, this method will homogenize the IP adresses in the attack to the first address in the
     subnet.
     :param attack: Attack object of which to determine the target IP address or network
+    :param threshold: Detection threshold for the target selection (0.5 if not set)
     :return: Target IP address as an IPNetwork
     """
+    if threshold is None:
+        threshold = 0.5
+
     LOGGER.debug("Inferring attack target.")
     targets: list[IPAddress] = get_outliers(attack.data,
                                             column='destination_address',
-                                            fraction_for_outlier=0.5,
+                                            fraction_for_outlier=threshold,
                                             use_zscore=False)
     if len(targets) > 0:
         return IPNetwork(targets[0])

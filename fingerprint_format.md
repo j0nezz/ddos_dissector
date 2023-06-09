@@ -40,6 +40,7 @@ The datatype `Map<?, Float>` refers to a map of values to their corresponding fr
 | `avg_bps`                                | Average number of bits/s during the attack                                                              | Integer          |
 | `avg_pps`                                | Average number of packets/s during the attack                                                           | Integer          |
 | `avg_Bpp`                                | Average number of Bytes per packet                                                                      | Integer          |
+| `location`                               | Recording location of the Fingerprint (use `-l` flag to set)                                            | Integer          |
 
 ### Attack vectors (excluding additional fields from PCAPs)
 
@@ -53,10 +54,12 @@ The datatype `Map<?, Float>` refers to a map of values to their corresponding fr
 | `tcp_flags`                           | List of outlier TCP flags (if any) with the corresponding fraction of the traffic,. e.g. {"...A....": 0.987}. null if the protocol is not TCP, or there are no outliers                                                                            | null or Map<String, Float>     |
 | `nr_flows` <br>(only from Flow files) | Number of flows that contribute to this attack vector                                                                                                                                                                                              | Integer                        |
 | `nr_packets`                          | Number of packets in this attack vector                                                                                                                                                                                                            | Integer                        |
+| `nr_packets_by_source`                | Number of packets in this attack vector by source IP                                                                                                                                                                                               | Map<String, Integer>           |
 | `nr_megabytes`                        | Number of megabytes sent through this attack vector                                                                                                                                                                                                | Integer                        |
 | `time_start`                          | Timestamp of the start of the attack vector: the first flow of this attack vector (timezone local to the attack target)                                                                                                                            | DateTime                       |
 | `duration_seconds`                    | Duration of this attack vector in seconds (last timestamp - first timestamp)                                                                                                                                                                       | Integer                        |
 | `source_ips`                          | Array of unique IP addressed that sent traffic to the target on this attack vector (truncated in the preview, and in the overview on DDoS-DB), the JSON file contains all IP addresses                                                             | Array of strings               |
+| `detection_threshold`                 | Percentage of attack traffic compared to all observed traffic                                                                                                                                                                                      | Float                          |
 
 ### Added in DDoS-DB
 
@@ -81,10 +84,11 @@ vectors. The following fields are added to fingerprints generated from PCAP file
 
 ### IP-based attack vectors (most)
 
-| **Field name**         | **Description**                 | **Data type**                   |
-|------------------------|---------------------------------|---------------------------------|
-| `fragmentation_offset` | fragmentation_offset of packets | Map<Integer, Float> or "random" |
-| `ttl`                  | Time to live                    | Map<Integer, Float> or "random" |
+| **Field name**         | **Description**                 | **Data type**                      |
+|------------------------|---------------------------------|------------------------------------|
+| `fragmentation_offset` | fragmentation_offset of packets | Map<Integer, Float> or "random"    |
+| `ttl`                  | Time to live                    | Map<Integer, Float> or "random"    |
+| `ttl_by_source`        | Time to live by source IP       | Map<String, List<Int>> or "random" |
 
 ### DNS attack vectors
 
