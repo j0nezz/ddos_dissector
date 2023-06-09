@@ -104,7 +104,7 @@ def read_pcap(filename: Path) -> pd.DataFrame:
     :param filename: location of the PCAP file
     :return: DataFrame of the contents
     """
-    LOGGER.info("Processing chunk")
+    LOGGER.debug("Processing chunk")
     # Check if tshark software is available
     tshark = shutil.which('tshark')
     if not tshark:
